@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/ask_me_stop.py\"",
+            "timeout": 5,
+            "statusMessage": "ask-me: checking for decisions left in prose"
+          }
+        ]
+      }
+    ]
+  }
+}

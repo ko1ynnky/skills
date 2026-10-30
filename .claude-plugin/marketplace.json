@@ -1,0 +1,15 @@
+{
+  "name": "ko1ynnky",
+  "owner": {
+    "name": "ko1ynnky",
+    "url": "https://github.com/ko1ynnky"
+  },
+  "description": "Agent skills and plugins for Claude Code and Codex.",
+  "plugins": [
+    {
+      "name": "ask-me",
+      "source": "./plugins/ask-me",
+      "description": "Turns decision lists left in prose at the end of a turn into question-tool calls."
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "ask-me",
+  "version": "0.1.0",
+  "description": "Turns decision lists left in prose at the end of a turn into question-tool calls.",
+  "author": {
+    "name": "ko1ynnky",
+    "url": "https://github.com/ko1ynnky"
+  },
+  "homepage": "https://github.com/ko1ynnky/skills",
+  "repository": "https://github.com/ko1ynnky/skills",
+  "license": "MIT",
+  "keywords": ["askuserquestion", "request_user_input", "hooks", "stop-hook", "questions"],
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Ask me",
+    "shortDescription": "Ask open decisions with the question tool instead of prose",
+    "developerName": "ko1ynnky",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/ko1ynnky/skills"
+  }
+}
