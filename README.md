@@ -55,6 +55,34 @@ It does nothing in non-interactive runs, so `claude -p`, the Agent SDK, `claude 
 python3 -m unittest discover -s plugins/ask-me/hooks
 ```
 
+## find-session-id
+
+Each agent's own picker shows only its own recent sessions. `find-session-id` searches Claude Code, Cursor and Codex transcripts at once, and prints the matching session IDs with the command to resume each one. Ask the agent for a past session by topic, or run `/find-session-id`.
+
+### Install
+
+Claude Code:
+
+```sh
+claude plugin marketplace add ko1ynnky/skills
+claude plugin install find-session-id@ko1ynnky
+```
+
+Codex:
+
+```sh
+codex plugin marketplace add ko1ynnky/skills
+codex plugin add find-session-id@ko1ynnky
+```
+
+Any agent that reads skills:
+
+```sh
+npx skills add ko1ynnky/skills -s find-session-id
+```
+
+The script needs `python3` on your `PATH`. It has no other dependencies, and it only reads your local transcripts.
+
 ## 日本語
 
 `ask-me` は、ターンの最後に「次の 4 点を確認してください」と文章で残された判断を、質問ツールで聞き直させるプラグインです。回答を手で打たず、フォームで選べるようになります。
@@ -67,6 +95,8 @@ Stop フックが各ターンの最後のメッセージを読み、末尾に判
 - Codex では、インストール後に `/hooks` でフックを信頼してください。信頼するまでフックは動きません。スクリプトが変わる更新の後も、信頼し直しが要ります。
 
 `claude -p` や `codex exec` などの非対話の実行では、フックは何もしません。
+
+`find-session-id` は、Claude Code、Cursor、Codex の過去のセッションをまとめてキーワード検索し、再開用のセッション ID を返します。インストールは上の find-session-id の手順です。読むのは手元の履歴だけです。
 
 ## License
 

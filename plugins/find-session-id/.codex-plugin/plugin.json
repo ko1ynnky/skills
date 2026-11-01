@@ -1,0 +1,21 @@
+{
+  "name": "find-session-id",
+  "version": "1.1.0",
+  "description": "Finds past Claude Code, Cursor and Codex sessions by keyword and prints their session IDs.",
+  "author": {
+    "name": "ko1ynnky",
+    "url": "https://github.com/ko1ynnky"
+  },
+  "homepage": "https://github.com/ko1ynnky/skills",
+  "repository": "https://github.com/ko1ynnky/skills",
+  "license": "MIT",
+  "keywords": ["session", "resume", "search", "history", "cursor", "codex", "セッション検索"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Find session ID",
+    "shortDescription": "Search past agent sessions and get the IDs to resume them",
+    "developerName": "ko1ynnky",
+    "category": "Productivity",
+    "websiteURL": "https://github.com/ko1ynnky/skills"
+  }
+}

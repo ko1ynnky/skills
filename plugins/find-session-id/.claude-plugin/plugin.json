@@ -1,0 +1,12 @@
+{
+  "name": "find-session-id",
+  "version": "1.1.0",
+  "description": "Finds past Claude Code, Cursor and Codex sessions by keyword and prints their session IDs.",
+  "author": {
+    "name": "ko1ynnky",
+    "url": "https://github.com/ko1ynnky"
+  },
+  "repository": "https://github.com/ko1ynnky/skills",
+  "license": "MIT",
+  "keywords": ["session", "resume", "search", "history", "cursor", "codex", "セッション検索"]
+}

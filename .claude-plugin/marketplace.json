@@ -10,6 +10,11 @@
       "name": "ask-me",
       "source": "./plugins/ask-me",
       "description": "Turns decision lists left in prose at the end of a turn into question-tool calls."
+    },
+    {
+      "name": "find-session-id",
+      "source": "./plugins/find-session-id",
+      "description": "Finds past Claude Code, Cursor and Codex sessions by keyword and prints their session IDs."
     }
   ]
 }
