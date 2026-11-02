@@ -82,6 +82,10 @@ CURSOR_TS_FMT = "%b %d, %Y, %I:%M %p"
 USER_QUERY_RE = re.compile(r"<user_query>(.*?)</user_query>", re.S)
 ROLLOUT_ID_RE = re.compile(r"rollout-.*?-([0-9a-fA-F-]{36})\.jsonl$")
 
+# Transcripts hold web pages and tool output, and what this script prints reaches
+# a terminal and an agent, so ESC and the other C0/C1 controls must not pass through.
+CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
 RESUME_TEMPLATES = {
     "claude": "claude --resume {id}",
     "cursor": "cursor-agent --resume={id}",
@@ -112,7 +116,8 @@ def shorten_path(path: Path) -> str:
 
 def clean_snippet(text: str) -> str:
     """Tool payloads carry escaped newlines; make one readable line of it."""
-    return " ".join(text.replace("\\n", " ").replace("\\t", " ").split())
+    text = text.replace("\\n", " ").replace("\\t", " ")
+    return " ".join(CONTROL_CHARS_RE.sub(" ", text).split())
 
 
 def parse_ts(source: str, raw: str | None) -> float | None:
@@ -421,7 +426,13 @@ def search_session(
 
     for item in ITERATORS[cand.source](cand.path, search_tools):
         if item.kind == "meta":
-            meta.update({k: v for k, v in item.meta.items() if v})
+            meta.update(
+                {
+                    k: CONTROL_CHARS_RE.sub("", v)
+                    for k, v in item.meta.items()
+                    if v and isinstance(v, str)
+                }
+            )
             continue
         if item.ts_raw:
             last_ts_raw = item.ts_raw
@@ -490,7 +501,7 @@ def search_session(
         path=cand.path,
         updated=parse_ts(cand.source, last_ts_raw) or st.st_mtime,
         size=st.st_size,
-        first_user_prompt=first_user_prompt or "",
+        first_user_prompt=clean_snippet(first_user_prompt or ""),
         user_prompt_count=user_prompt_count,
         subagent=subagent,
         snippets=[matched[i] for i in sorted(matched)],
@@ -507,11 +518,14 @@ def resume_command(m: Match) -> str:
     return RESUME_TEMPLATES[m.source].format(id=m.resume_id)
 
 
+def prompt_preview(m: Match, snippet_len: int) -> str:
+    prompt = m.first_user_prompt
+    return prompt[:snippet_len] + "…" if len(prompt) > snippet_len else prompt
+
+
 def format_result(m: Match, snippet_len: int) -> str:
     when = datetime.fromtimestamp(m.updated).strftime("%Y-%m-%d %H:%M")
-    prompt = m.first_user_prompt.replace("\n", " ").strip()
-    if len(prompt) > snippet_len:
-        prompt = prompt[:snippet_len] + "…"
+    prompt = prompt_preview(m, snippet_len)
     lines = [
         f"sessionId: {m.session_id}",
         f"  source:   {m.source}    project: {m.project}",
@@ -531,7 +545,7 @@ def format_result(m: Match, snippet_len: int) -> str:
     return "\n".join(lines)
 
 
-def to_dict(m: Match) -> dict:
+def to_dict(m: Match, snippet_len: int) -> dict:
     return {
         "source": m.source,
         "session_id": m.session_id,
@@ -539,7 +553,7 @@ def to_dict(m: Match) -> dict:
         "path": str(m.path),
         "updated": datetime.fromtimestamp(m.updated).isoformat(timespec="seconds"),
         "size": m.size,
-        "first_user_prompt": m.first_user_prompt,
+        "first_user_prompt": prompt_preview(m, snippet_len),
         "user_prompt_count": m.user_prompt_count,
         "subagent": m.subagent,
         "extra_transcripts": m.extra_transcripts,
@@ -677,7 +691,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     matches = matches[: args.limit]
 
     if args.json:
-        print(json.dumps([to_dict(m) for m in matches], ensure_ascii=False, indent=2))
+        print(json.dumps([to_dict(m, args.snippet_len) for m in matches], ensure_ascii=False, indent=2))
         return 0 if matches else 1
 
     if not matches:

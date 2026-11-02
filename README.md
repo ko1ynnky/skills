@@ -83,6 +83,12 @@ npx skills add ko1ynnky/skills -s find-session-id
 
 The script needs `python3` on your `PATH`. It has no other dependencies, and it only reads your local transcripts.
 
+### Tests
+
+```sh
+python3 -m unittest discover -s plugins/find-session-id/skills/find-session-id/scripts
+```
+
 ## 日本語
 
 `ask-me` は、ターンの最後に「次の 4 点を確認してください」と文章で残された判断を、質問ツールで聞き直させるプラグインです。回答を手で打たず、フォームで選べるようになります。
