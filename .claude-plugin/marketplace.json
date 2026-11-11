@@ -15,6 +15,11 @@
       "name": "find-session-id",
       "source": "./plugins/find-session-id",
       "description": "Finds past Claude Code, Cursor and Codex sessions by keyword and prints their session IDs."
+    },
+    {
+      "name": "devin-tmux",
+      "source": "./plugins/devin-tmux",
+      "description": "Keeps the Devin CLI running in tmux so an agent can send follow-up instructions, wait for the turn to end and answer permission prompts."
     }
   ]
 }

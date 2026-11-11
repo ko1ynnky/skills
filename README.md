@@ -89,6 +89,36 @@ The script needs `python3` on your `PATH`. It has no other dependencies, and it 
 python3 -m unittest discover -s plugins/find-session-id/skills/find-session-id/scripts
 ```
 
+## devin-tmux
+
+The Devin CLI is interactive, and an agent's terminal tool cannot type into a program that is already running. So agents tend to restart Devin with `--prompt-file` for every instruction, and in such a turn Devin rejects every operation that needs your confirmation. `devin-tmux` keeps Devin running inside tmux instead. The agent sends follow-up instructions, waits for the turn to end or for a permission prompt, answers the prompt and reads the screen, all without restarting Devin. You can watch the same screen, or attach with `tmux attach -t devin-<name>` and type into it yourself.
+
+This is an unofficial helper. It is not affiliated with or endorsed by Cognition, the maker of Devin. It detects the end of a turn from lines in the Devin CLI's local log, which are not a documented interface, so a new Devin CLI version may break it.
+
+### Install
+
+Claude Code:
+
+```sh
+claude plugin marketplace add ko1ynnky/skills
+claude plugin install devin-tmux@ko1ynnky
+```
+
+Codex:
+
+```sh
+codex plugin marketplace add ko1ynnky/skills
+codex plugin add devin-tmux@ko1ynnky
+```
+
+Any agent that reads skills:
+
+```sh
+npx skills add ko1ynnky/skills -s devin-tmux
+```
+
+It needs `bash`, `tmux` and the Devin CLI (`devin`) on your `PATH`. The instructions you send are kept under `~/.local/state/devin-tmux/<name>/` until `stop` removes them.
+
 ## 日本語
 
 `ask-me` は、ターンの最後に「次の 4 点を確認してください」と文章で残された判断を、質問ツールで聞き直させるプラグインです。回答を手で打たず、フォームで選べるようになります。
@@ -103,6 +133,8 @@ Stop フックが各ターンの最後のメッセージを読み、末尾に判
 `claude -p` や `codex exec` などの非対話の実行では、フックは何もしません。
 
 `find-session-id` は、Claude Code、Cursor、Codex の過去のセッションをまとめてキーワード検索し、再開用のセッション ID を返します。インストールは上の find-session-id の手順です。読むのは手元の履歴だけです。
+
+`devin-tmux` は、Devin CLI を tmux の中で動かし続けるスキルです。エージェントは Devin を起動し直さずに、続きの指示を送り、ターンの終わりや許可待ちを待ち、許可に答えられます。`--prompt-file` で起動し直す方法と違い、確認が要る操作も自動で却下されません。Cognition の公式ツールではありません。ターンの終わりは Devin CLI のログの行で判定しているため、Devin CLI の更新で動かなくなることがあります。インストールは上の devin-tmux の手順です。`bash`、`tmux`、`devin` が要ります。
 
 ## License
 

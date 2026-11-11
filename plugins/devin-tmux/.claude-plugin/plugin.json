@@ -1,0 +1,12 @@
+{
+  "name": "devin-tmux",
+  "version": "1.0.0",
+  "description": "Keeps the Devin CLI running in tmux so an agent can send follow-up instructions, wait for the turn to end and answer permission prompts.",
+  "author": {
+    "name": "ko1ynnky",
+    "url": "https://github.com/ko1ynnky"
+  },
+  "repository": "https://github.com/ko1ynnky/skills",
+  "license": "MIT",
+  "keywords": ["devin", "tmux", "cli", "agent", "delegation", "codex"]
+}
