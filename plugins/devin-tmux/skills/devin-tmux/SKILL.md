@@ -10,14 +10,17 @@ An agent's terminal tool cannot type into a program that is already running. Run
 ## Steps
 
 1. Start, once per task. The tmux session is named `devin-<name>`; a name takes letters, digits, `-` and `_`.
-   - New: `dt start <name> <work folder> --model swe-2-high`
+   - New: `dt start <name> <work folder> --model swe-2-high --permission-mode accept-edits`
    - Resume: `dt start <name> <work folder> -r <Devin session name>` (the names are in the `sessions` table of `~/.local/share/devin/cli/sessions.db`)
+   - Give the folder the work happens in (the worktree, for example), not a parent folder. Devin then reads that repository's `AGENTS.md`, and `accept-edits` covers edits inside it only. It reads its settings only from that folder, though (see Notes).
+   - `--permission-mode accept-edits` lets file edits inside the work folder run without a prompt, while every shell command still asks. Without it, each edit asks too. Don't use `smart` when the work includes commits, pushes or deletions: in a test on Devin CLI 3000.12.57, `git commit`, `git push` and `rm` ran in `smart` mode without asking, although the docs say these always ask.
    - If the output shows "Do you trust the authors of this directory?" or a theme picker, close it first with `dt keys <name> Enter` or similar. While it stays open, permission prompts are rejected automatically.
    - Then let the user watch Devin. In the Claude Code desktop app, run `<this skill's base directory>/scripts/devin-tmux.sh view <name>` in a Terminal tab (`run_in_terminal`, with a title such as `Devin <name> (view)`, and with `cwd` set to the absolute path of this session's working folder: without it, the app fills `cwd` in, and the auto mode classifier sends the call back once because its input changed), then show it with `show_pane` (`pane: "terminal"` and that `tab_id`). `view` redraws the screen every 2 seconds; typing in that tab does not reach Devin. Where you cannot open a terminal tab (Codex, for example), give the user this command.
 2. Send: pass the instruction on stdin (`dt send <name> <<'EOF'` … `EOF`). The script keeps a copy at `~/.local/state/devin-tmux/<name>/prompt-<n>.md` before pasting it, so don't choose a temp file name yourself (parallel agents would choose the same one and overwrite each other). If the instruction already lives in a file you keep, `dt send <name> <file>` works too. It goes in as a bracketed paste, so multi-line text is not submitted halfway.
 3. Wait: `dt wait <name> [seconds]` (default 540, to stay inside a 10-minute tool timeout). Line 1 is the state alone. Branch on the exit code (`dt wait x; case $? in 0) …;; 10) …;; esac`), never on the whole output. On a permission prompt, the screen follows from line 2.
+   - In Claude Code, run `wait`, alone or after `send` or `keys` in the same command, with `run_in_background: true`. A wait can take minutes, and in the foreground it holds up the conversation. The notice when it ends gives the exit code, and line 1 of its output file is the state.
    - `TURN_END` (0): the turn ended. Read the answer with `dt read <name> 80`, and check the files and diffs it produced yourself.
-   - `PERMISSION_PROMPT` (10): waiting for permission; the end of the screen follows. If the operation is within what you were asked to do, answer with `dt keys <name> Enter` (follow the choices on screen, moving with `Down` and the like). Otherwise tell the user.
+   - `PERMISSION_PROMPT` (10): Devin waits for an answer; the end of the screen follows. If the operation is within what you were asked to do, answer with `dt keys <name> Enter`, which picks the highlighted `Allow` for this once. Otherwise pick `Deny` (see "Answering a prompt") or tell the user.
    - `STILL_RUNNING` (12): still working. Run `dt wait` again.
    - `EXITED` (11): Devin exited.
 4. For follow-up instructions, repeat 2 and 3. Don't restart Devin.
@@ -25,12 +28,21 @@ An agent's terminal tool cannot type into a program that is already running. Run
 
 To work alongside, the user can run `tmux attach -t devin-<name>` in a terminal and share the same screen (detach with `Ctrl-b d`).
 
+## Answering a prompt
+
+- A command prompt lists `Allow`, `Bypass mode` and `Deny`; an edit prompt lists `Allow`, `Accept edits mode`, `Bypass mode` and `Deny`. `Allow` is highlighted. To pick another entry, press `Down`, check where `❭` is with `dt read <name> 6`, then press `Enter`.
+- `Accept edits mode` on an edit inside the work folder stops the prompts for later edits in this session, as `--permission-mode accept-edits` does.
+- Don't pick `Bypass mode`: it approves every later call, pushes included.
+- `Deny` ends Devin's turn. Tell it why and what to do next with `dt send`.
+- When Devin runs several tool calls at once, their prompts come one after another. Run `dt wait` again after each answer; it reports the next one.
+
 ## Notes
 
 - From Codex, the sandbox may refuse to connect to the tmux socket (`/private/tmp/tmux-<uid>/`). If it does, run with escalated permissions or ask the user to allow it. Don't look for another way to run Devin.
 - In a turn resumed with `devin -r … --prompt-file …`, every operation that needs confirmation (git commands that change things, installing packages, …) is rejected automatically with `NonInteractive("User skipped this tool call")`. Sent as ordinary input through tmux, it shows the permission prompt instead.
+- Devin reads `.devin/config.json`, `.devin/config.local.json` and `.windsurf/rules/` only in the folder it starts in, not in parent folders. Started in a worktree under a project folder, it misses the project's permission rules and rules. Put what must apply in every folder in `~/.config/devin/config.json` (`permissions`, `permission_mode`) and `~/.codeium/windsurf/memories/global_rules.md`.
 - After a resume, a bypass mode saved in that session can win even over `--permission-mode smart`. Check the status line with `dt read` (for example `SWE-2 High · bypass`). If it is bypass, write in the instruction where Devin must stop (before a commit or a push, for example).
-- The end of a turn is detected from the log (`dt log <name>`; the file is the child `devin acp`'s `~/.local/share/devin/cli/logs/devin_<datetime>_<pid>.log`) by the line `chisel_core::turn_stats: close`. Lines with `load_session` are the reload on resume and don't count. These log lines are not a documented interface and may change in a new Devin CLI version; if `wait` never returns `TURN_END`, check them first.
+- The end of a turn is detected from the log (`dt log <name>`; the file is the child `devin acp`'s `~/.local/share/devin/cli/logs/devin_<datetime>_<pid>.log`) by the line `chisel_core::turn_stats: close`. Lines with `load_session` are the reload on resume and don't count. A prompt is detected from the screen instead, by the menu's `↵ confirm · esc cancel` footer: for parallel tool calls the log records every prompt at once, while the screen shows them one at a time. `wait` counts a menu only when it is still there 2 seconds later, so the one just answered with `keys` does not count. These log lines and the footer are not a documented interface and may change in a new Devin CLI version; if `wait` never returns `TURN_END` or `PERMISSION_PROMPT`, check them first.
 - If you watch the log yourself, don't put `cut` in the pipe: it holds lines back instead of passing each one on, so no notification arrives. To shorten lines, use `awk '{print substr($0,1,200); fflush()}'`.
 - To only watch, use `dt view`, not `tmux attach -r`. While a read-only client is attached, the window shrinks to its size (and stays shrunk after it leaves), and `tmux send-keys` from outside fails with "client is read-only". `dt send` and `dt keys` go through a control-mode client, so they still work. Key sequences such as arrows pasted with `paste-buffer` are not treated as key presses by Devin.
 - `dt keys` takes key names only (`Enter`, `Down`, `C-c`, …). Send text with `dt send`.

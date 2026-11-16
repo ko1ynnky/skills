@@ -36,6 +36,12 @@ log_file() {
 # load_session lines are the reload on resume, not the end of a turn
 count() { grep "$2" "$1" 2>/dev/null | grep -vc load_session || true; }
 
+# A prompt is read from the screen, not counted in the log: for parallel tool calls the log records every
+# prompt at once while the screen shows them one at a time, so the prompts after the first add no log line.
+# A menu waiting for an answer ends with a footer such as "↑↓ select · ↵ confirm · esc cancel". Only the
+# ASCII words are matched, so the locale does not matter
+prompt_on_screen() { tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -3 | grep -q 'confirm.*esc cancel'; }
+
 # send-keys from outside targets a client attached to the session. When that client is read-only
 # (tmux attach -r), it fails with "client is read-only", so attach a writable control-mode client just
 # for the send. paste-buffer would get through, but Devin does not treat pasted key sequences as key presses.
@@ -76,7 +82,6 @@ case "$cmd" in
     if [ "${1:--}" = - ]; then cat > "$file"; else cp "$1" "$file"; fi
     L=$(log_file "$name")
     count "$L" "turn_stats: close" > "$STATE_DIR/$name.turns"
-    count "$L" "prompting user" > "$STATE_DIR/$name.prompts"
     tmux load-buffer -b "dt-$name" "$file"
     tmux paste-buffer -p -d -b "dt-$name" -t "$s"
     sleep 1
@@ -89,13 +94,14 @@ case "$cmd" in
     [[ $limit =~ ^[0-9]+$ ]] || die "seconds must be a whole number: $limit"
     L=$(log_file "$name")
     t0=$(cat "$STATE_DIR/$name.turns" 2>/dev/null || echo 0)
-    p0=$(cat "$STATE_DIR/$name.prompts" 2>/dev/null || echo 0)
     end=$((SECONDS + limit))
     while [ $SECONDS -lt $end ]; do
       tmux has-session -t "$s" 2>/dev/null || { echo "EXITED"; exit 11; }
       [ "$(count "$L" "turn_stats: close")" -gt "$t0" ] && { echo "TURN_END"; exit 0; }
-      [ "$(count "$L" "prompting user")" -gt "$p0" ] && {
-        echo "PERMISSION_PROMPT"; tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -20; exit 10; }
+      # A menu just answered with keys can stay drawn for a moment, so count only one still there 2 seconds later
+      if prompt_on_screen && sleep 2 && prompt_on_screen; then
+        echo "PERMISSION_PROMPT"; tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -20; exit 10
+      fi
       sleep 5
     done
     echo "STILL_RUNNING"; exit 12
@@ -105,12 +111,7 @@ case "$cmd" in
     [[ $lines =~ ^[0-9]+$ ]] || die "lines must be a whole number: $lines"
     tmux capture-pane -p -J -S -2000 -t "$s" | grep -v '^\s*$' | tail -"$lines"
     ;;
-  keys)
-    press "$@"
-    # Move the baseline to the current count, so the next wait does not return at once for the prompt just answered.
-    # The trust prompt comes before any log exists, so don't fail keys there
-    if L=$(log_file "$name"); then count "$L" "prompting user" > "$STATE_DIR/$name.prompts"; fi
-    ;;
+  keys) press "$@" ;;
   log)  log_file "$name" ;;
   view)
     # Attaching with tmux attach -r would make send-keys fail, so copy the screen without becoming a client
