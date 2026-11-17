@@ -69,7 +69,10 @@ Use an `xhigh` lead for the hardest work. Name the whole pairing ID, including t
 
 ## Answering a prompt
 
-- A command prompt lists `Allow`, `Bypass mode` and `Deny`; an edit prompt lists `Allow`, `Accept edits mode`, `Bypass mode` and `Deny`. `Allow` is highlighted. To pick another entry, press `Down`, check where `❭` is with `dt read <name> 6`, then press `Enter`.
+- A command prompt lists `Allow`, `Bypass mode` and `Deny`; an edit prompt, or a command that writes into the work folder, lists `Allow`, `Accept edits mode`, `Bypass mode` and `Deny`. `Allow` is highlighted. To pick another entry, press `Down`, check where `❭` is with `dt read <name> 6`, then press `Enter`.
+- On a command prompt, the `Allow` row also has a scope, such as `Allow ← ◼◼◼◼ → Once Exec(date)`, with `←→ 1-4 scope` in the footer (Devin CLI 3000.13.4). It starts at `Once`, so `Enter` approves this call only. `Right` and `Left` move it through `Session` (until this Devin exits, kept in memory), `Project` (in a test on 3000.13.4 it wrote the rule to the work folder's `.devin/config.local.json`; the docs say `.devin/config.json`) and `Always` (the user config `~/.config/devin/config.json`, per the docs). Leave it at `Once` unless the user asked for a wider grant: the wider scopes keep approving the rule after this call, and `Project` and `Always` write it into a config file.
+- The number keys `1` to `4` pick a scope and approve in one keypress, without `Enter`. Don't send them with `dt keys` unless you mean to approve with that scope.
+- `e` on a command prompt opens the command for editing before it runs (`↵ run edited command · esc back`). A command that writes into the work folder has `e` but no scope, and an edit prompt has neither.
 - `Accept edits mode` on an edit inside the work folder stops the prompts for later edits in this session, as `--permission-mode accept-edits` does.
 - Don't pick `Bypass mode`: it approves every later call, pushes included.
 - `Deny` ends Devin's turn. Tell it why and what to do next with `dt send`.
