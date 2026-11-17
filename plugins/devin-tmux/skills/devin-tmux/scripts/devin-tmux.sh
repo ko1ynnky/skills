@@ -171,13 +171,18 @@ case "$cmd" in
     # Shift-Tab cycles the mode into smart and bypass
     for k in "$@"; do
       case $k in
-        Enter)
-          # Checked on the screen before the keys go in, so Enter must come on its own after any move
-          [ $# -eq 1 ] || die "send Enter on its own, after checking the highlighted row with read"
-          tmux capture-pane -p -t "$s" | grep -q '^[[:space:]]*❭[[:space:]]*Bypass mode' &&
-            die "Bypass mode is highlighted; it would approve every later call without asking. Move to Allow or Deny first" ;;
-        Escape|Up|Down|C-c|BSpace) ;;
-        *) die "keys takes only Enter, Escape, Up, Down, C-c and BSpace; number keys, Left and Right would widen an approval and Shift-Tab would cycle into smart and bypass. Send text with send: $k" ;;
+        Enter|Up|Down)
+          # Outside a menu they work on the input line, where Up brings back earlier input from any session
+          # (an old instruction, or /bypass) for Enter to submit
+          menu_open || die "Enter, Up and Down answer a prompt or menu, and none is open in devin-$name; send text with send"
+          if [ "$k" = Enter ]; then
+            # Checked on the screen before the keys go in, so Enter must come on its own after any move
+            [ $# -eq 1 ] || die "send Enter on its own, after checking the highlighted row with read"
+            tmux capture-pane -p -t "$s" | grep -q '^[[:space:]]*❭[[:space:]]*Bypass mode' &&
+              die "Bypass mode is highlighted; it would approve every later call without asking. Move to Allow or Deny first"
+          fi ;;
+        Escape|C-c) ;;
+        *) die "keys takes only Enter, Up and Down for an open prompt or menu, and Escape and C-c; number keys, Left and Right would widen an approval and Shift-Tab would cycle into smart and bypass. Send text with send: $k" ;;
       esac
     done
     press "$@"
