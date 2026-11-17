@@ -80,7 +80,7 @@ menu_open() { tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -1 | grep -q
 # Hints on the right follow a run of spaces. Prints the unsafe mode, if any
 unsafe_mode_on_screen() {
   local left re=" · ($UNSAFE_MODES) · "
-  left=$(tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -1 | sed 's/   .*//')
+  left=$(tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -1 | sed 's/   .*//' | tr '[:upper:]' '[:lower:]')
   [[ " · $left · " =~ $re ]] && echo "${BASH_REMATCH[1]}"
 }
 
@@ -113,19 +113,22 @@ case "$cmd" in
   send)
     # First, since behind the trust prompt the child that writes the log has not started yet
     menu_open && die "a prompt or menu is open in devin-$name; answer or close it with keys first"
-    # Before saving the instruction, so that no copy is left behind when Devin cannot receive it
-    L=$(log_file "$name")
     # Pasted text that ends in a newline goes to the agent as a message, so a slash command such as
     # /accept-edits from a heredoc would not run. $(...) drops the trailing newlines
     if [ "${1:--}" = - ]; then text=$(cat); else text=$(cat "$1"); fi
+    # How Devin treats leading blanks and capitals in a command is unknown, so judge the first line without them
+    first=$(printf '%s\n' "$text" | sed -n '/[^[:space:]]/{s/^[[:space:]]*//;p;q;}' | tr '[:upper:]' '[:lower:]')
     re="^/(mode[[:space:]]+)?($UNSAFE_MODES)([[:space:]]|\$)"
-    [[ $text =~ $re ]] && die "refusing to switch devin-$name to ${BASH_REMATCH[2]} mode, which runs commands without asking"
-    # Switching back to a safe mode is what the refusal below asks for, so it gets through
-    re='^/(mode[[:space:]]+)?(accept-edits|normal|plan)([[:space:]]|$)'
+    [[ $first =~ $re ]] && die "refusing to switch devin-$name to ${BASH_REMATCH[2]} mode, which runs commands without asking"
+    # Switching back to a safe mode is what the refusal below asks for, so it gets through, but only alone:
+    # anything after it would reach the agent as a message and run without asking
+    re='^/(mode[[:space:]]+)?(accept-edits|normal|plan)$'
     if ! [[ $text =~ $re ]]; then
       m=$(unsafe_mode_on_screen || true)
-      [ -z "$m" ] || die "devin-$name runs in $m mode, which runs commands without asking; send /accept-edits first"
+      [ -z "$m" ] || die "devin-$name runs in $m mode, which runs commands without asking; send /accept-edits on its own first"
     fi
+    # Before saving the instruction, so that no copy is left behind when Devin cannot receive it
+    L=$(log_file "$name")
     # Keep each instruction in a folder per name. A shared temp file chosen by the caller would let parallel agents overwrite each other
     dir="$STATE_DIR/$name"; mkdir -p -m 700 "$dir"
     n=$(( $(ls "$dir" | wc -l) + 1 )); file="$dir/prompt-$n.md"
@@ -163,14 +166,18 @@ case "$cmd" in
     tmux capture-pane -p -J -S -2000 -t "$s" | grep -v '^\s*$' | tail -"$lines"
     ;;
   keys)
+    # Only the keys the steps need. Listing the dangerous ones instead let others through: number keys and
+    # Left/Right widen the scope of an approval (3 Project and 4 Always save the rule in a config file), and
+    # Shift-Tab cycles the mode into smart and bypass
     for k in "$@"; do
-      [[ $k =~ ^[0-9]+$ ]] && die "number keys answer a permission prompt at once, with the scope of that number (3 Project and 4 Always save the rule in a config file); move with Down and press Enter on its own"
       case $k in
-        Enter|C-m|KPEnter)
+        Enter)
           # Checked on the screen before the keys go in, so Enter must come on its own after any move
           [ $# -eq 1 ] || die "send Enter on its own, after checking the highlighted row with read"
           tmux capture-pane -p -t "$s" | grep -q '^[[:space:]]*❭[[:space:]]*Bypass mode' &&
             die "Bypass mode is highlighted; it would approve every later call without asking. Move to Allow or Deny first" ;;
+        Escape|Up|Down|C-c|BSpace) ;;
+        *) die "keys takes only Enter, Escape, Up, Down, C-c and BSpace; number keys, Left and Right would widen an approval and Shift-Tab would cycle into smart and bypass. Send text with send: $k" ;;
       esac
     done
     press "$@"
