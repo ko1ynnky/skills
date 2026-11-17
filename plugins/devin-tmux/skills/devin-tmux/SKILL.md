@@ -10,7 +10,7 @@ An agent's terminal tool cannot type into a program that is already running. Run
 ## Steps
 
 1. Start, once per task. The tmux session is named `devin-<name>`; a name takes letters, digits, `-` and `_`.
-   - New: `dt start <name> <work folder> --model swe-2-high --permission-mode accept-edits`
+   - New: `dt start <name> <work folder> --model swe-2-high --permission-mode accept-edits`. For another model, see "Choosing a model".
    - Resume: `dt start <name> <work folder> -r <Devin session name>` (the names are in the `sessions` table of `~/.local/share/devin/cli/sessions.db`)
    - Give the folder the work happens in (the worktree, for example), not a parent folder. Devin then reads that repository's `AGENTS.md`, and `accept-edits` covers edits inside it only. It reads its settings only from that folder, though (see Notes).
    - `--permission-mode accept-edits` lets file edits inside the work folder run without a prompt, while every shell command still asks. Without it, each edit asks too. Don't use `smart` when the work includes commits, pushes or deletions: in a test on Devin CLI 3000.12.57, `git commit`, `git push` and `rm` ran in `smart` mode without asking, although the docs say these always ask.
@@ -27,6 +27,43 @@ An agent's terminal tool cannot type into a program that is already running. Run
 5. When done, run `dt stop <name>`. It also deletes the saved instructions.
 
 To work alongside, the user can run `tmux attach -t devin-<name>` in a terminal and share the same screen (detach with `Ctrl-b d`).
+
+## Choosing a model
+
+Pass the model to `dt start` with `--model`. To change it in a running session, send `/model <id>` with `dt send`. `devin models` lists every model with its price on the signed-in account. Trust that list over the docs.
+
+### Who pays
+
+In the Devin CLI, the model decides who pays.
+
+- A model that `devin models` marks `Free` costs nothing. On Pro, Max, and Teams, this covers `swe-2-medium`, `swe-2-high`, `swe-2-max`, and the SWE-2 sidekick in Fusion. Enterprise accounts pay for SWE-2.
+- A GPT model bills a ChatGPT plan when the account shares one. Sharing needs a ChatGPT Go, Plus, or Pro plan linked in Devin, on a Devin Pro, Max, or Teams plan. Run `/billing` to check. It shows `Use your ChatGPT plan: on` while GPT goes to the ChatGPT plan. Fast and priority GPT variants never go to the ChatGPT plan.
+- Every other model bills the Devin quota at the price that `devin models` shows, and then on-demand credits. A Teams flex seat has no quota, so it bills the credits directly.
+
+### Pick by the work
+
+| Work | Model |
+| --- | --- |
+| Most tasks | `swe-2-high` |
+| A harder task, or one that `swe-2-high` got wrong | `swe-2-max` |
+| A design decision, a subtle bug, or a task that `swe-2-max` got wrong | A Fusion pairing with a frontier lead and the SWE-2 sidekick. Pick the lead in the next section. |
+
+### Pick the Fusion lead
+
+The lead does the planning and the review, and the free SWE-2 sidekick writes most of the code. So the lead decides what a Fusion session costs.
+
+- Without a shared ChatGPT plan, every lead bills the Devin quota or credits. Use `fusion-claude-opus-5-5-high-sidekick-swe-2-medium`. Claude Opus 5.5 costs less per token than GPT-6 Astra.
+- With a shared ChatGPT plan, use `fusion-gpt-6-astra-high-sidekick-swe-2-medium`. The GPT lead bills the ChatGPT plan, a flat fee, so it adds no cost until the plan's allowance runs out. That allowance is the one Codex uses. If the user needs it for Codex, use the Claude lead, or ask the user to cap the share for Devin in ChatGPT under **Settings > Usage**.
+
+Use an `xhigh` lead for the hardest work. Name the whole pairing ID, including the lead's effort. The default pairing uses a Medium lead. Whether GPT goes to the ChatGPT plan is the account owner's choice, so don't change `/billing` yourself.
+
+### Check before you start
+
+- Skip model IDs that contain `lightning`, `priority`, or `fast`. They bill the Devin quota or credits at a higher price.
+- With a shared ChatGPT plan, a request that the plan cannot serve goes to the Devin quota and then to on-demand credits, without asking. When both are used up, the request fails.
+- The line under the Devin CLI banner shows the remaining quota, such as `Teams · 0% remaining`. Read it with `dt read` after `dt start`. The credit balance is in Devin's **Settings > Usage & limits**.
+- Free SWE-2 still has a rate limit. When Devin reports it, tell the user. Don't switch to a paid model to keep going.
+- A Devin Cloud session started from the Devin MCP takes a mode, not a model. It needs Devin quota or on-demand credits to start, and it bills its machine time there. For work in a local checkout, use the CLI.
 
 ## Answering a prompt
 
