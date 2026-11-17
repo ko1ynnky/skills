@@ -93,6 +93,9 @@ case "$cmd" in
     dir="$STATE_DIR/$name"; mkdir -p -m 700 "$dir"
     n=$(( $(ls "$dir" | wc -l) + 1 )); file="$dir/prompt-$n.md"
     if [ "${1:--}" = - ]; then cat > "$file"; else cp "$1" "$file"; fi
+    # Pasted text that ends in a newline goes to the agent as a message, so a slash command such as
+    # /accept-edits from a heredoc would not run. $(...) drops the trailing newlines
+    text=$(cat "$file"); printf '%s' "$text" > "$file"
     count "$L" "turn_stats: close" > "$STATE_DIR/$name.turns"
     tmux load-buffer -b "dt-$name" "$file"
     tmux paste-buffer -p -d -b "dt-$name" -t "$s"
