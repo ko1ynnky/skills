@@ -22,11 +22,19 @@ die() { echo "devin-tmux: $*" >&2; exit 2; }
 
 session() { echo "devin-$1"; }
 
-# The real log belongs to the child `devin acp`. Find it from the child pids of devin in the pane
+# The real log belongs to the child `devin acp`. Find it from the child pids of devin in the pane.
+# With the shared daemon (the default on Devin CLI 3000.13.4), the turn ends go to the daemon's log, whose
+# lines name no session, so counting them would pick up the turns of every other devin on it. Refuse
+# rather than wait on a log that never changes. The daemon itself can be a child too, of the devin that started it
 log_file() {
   local pane_pid c f
   pane_pid=$(tmux display -p -t "$(session "$1")" '#{pane_pid}')
   for c in $(pgrep -P "$pane_pid" 2>/dev/null); do
+    case $(ps -o command= -p "$c" 2>/dev/null) in
+      *" daemon run"*) continue ;;
+      *--process-model=daemon*)
+        die "devin-$1 runs its agent in the shared Devin daemon, so the end of its turns cannot be told apart from other sessions'. Stop it with stop and start it again with start (add -r <Devin session name> to resume): start runs Devin with --process-model in-process" ;;
+    esac
     f=$(ls "$LOG_DIR"/*_"$c".log 2>/dev/null | head -1 || true)
     [ -n "$f" ] && { echo "$f"; return 0; }
   done
@@ -69,6 +77,8 @@ mkdir -p -m 700 "$STATE_DIR"
 case "$cmd" in
   start)
     dir=${1:?work folder required}; shift
+    # In-process keeps the agent's log to this devin alone; see log_file. Devin rejects the option given twice
+    case " $* " in *" --process-model"[\ =]*) ;; *) set -- "$@" --process-model in-process ;; esac
     # Given devin and its arguments separately, tmux runs them without a shell, so no argument is parsed again
     tmux new-session -d -s "$s" -x 220 -y 50 -c "$dir" devin "$@"
     sleep 8
