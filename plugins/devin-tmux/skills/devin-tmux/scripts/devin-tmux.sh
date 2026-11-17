@@ -17,6 +17,10 @@ set -euo pipefail
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/devin-tmux"
 LOG_DIR="$HOME/.local/share/devin/cli/logs"
+# Modes that run commands without asking. In tests on Devin CLI 3000.12.57 and 3000.13.4, smart ran git commit,
+# git push and rm unasked, although its docs say these always ask; the others approve every call. Claude Code's
+# permission rules and hooks never see what Devin runs, so this script is the last place to stop an agent picking them
+UNSAFE_MODES='smart|bypass|yolo|dangerous|autonomous'
 
 die() { echo "devin-tmux: $*" >&2; exit 2; }
 
@@ -67,6 +71,19 @@ press() {
   fi
 }
 
+# A menu (a permission prompt, the trust prompt, the command editor) ends the screen with its key hints.
+# Text pasted into it would be taken as key presses
+menu_open() { tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -1 | grep -q 'esc cancel\|esc back'; }
+
+# The status line ends the screen: the model, then " · " and the mode ("SWE-2 High · accept edits"), or the
+# mode first for plan ("Plan · SWE-2 High"). A Fusion model name has " · " in it too, so match whole parts.
+# Hints on the right follow a run of spaces. Prints the unsafe mode, if any
+unsafe_mode_on_screen() {
+  local left re=" · ($UNSAFE_MODES) · "
+  left=$(tmux capture-pane -p -t "$s" | grep -v '^\s*$' | tail -1 | sed 's/   .*//')
+  [[ " · $left · " =~ $re ]] && echo "${BASH_REMATCH[1]}"
+}
+
 cmd=${1:?usage: devin-tmux.sh start|send|wait|read|keys|log|view|stop <name> ...}
 name=${2:?name required}
 shift 2
@@ -78,6 +95,13 @@ mkdir -p -m 700 "$STATE_DIR"
 case "$cmd" in
   start)
     dir=${1:?work folder required}; shift
+    mode=${DEVIN_PERMISSION_MODE:-}; prev=
+    for a in "$@"; do
+      [ "$prev" = --permission-mode ] && mode=$a
+      case $a in --permission-mode=*) mode=${a#*=} ;; esac
+      prev=$a
+    done
+    [[ $mode =~ ^($UNSAFE_MODES)$ ]] && die "permission mode $mode runs commands without asking (smart ran git commit, push and rm in tests); use accept-edits"
     # In-process keeps the agent's log to this devin alone; see log_file. Devin rejects the option given twice
     case " $* " in *" --process-model"[\ =]*) ;; *) set -- "$@" --process-model in-process ;; esac
     # Given devin and its arguments separately, tmux runs them without a shell, so no argument is parsed again
@@ -87,15 +111,25 @@ case "$cmd" in
     echo "--- If a trust prompt or a theme picker is open, close it with keys before you send"
     ;;
   send)
+    # First, since behind the trust prompt the child that writes the log has not started yet
+    menu_open && die "a prompt or menu is open in devin-$name; answer or close it with keys first"
     # Before saving the instruction, so that no copy is left behind when Devin cannot receive it
     L=$(log_file "$name")
+    # Pasted text that ends in a newline goes to the agent as a message, so a slash command such as
+    # /accept-edits from a heredoc would not run. $(...) drops the trailing newlines
+    if [ "${1:--}" = - ]; then text=$(cat); else text=$(cat "$1"); fi
+    re="^/(mode[[:space:]]+)?($UNSAFE_MODES)([[:space:]]|\$)"
+    [[ $text =~ $re ]] && die "refusing to switch devin-$name to ${BASH_REMATCH[2]} mode, which runs commands without asking"
+    # Switching back to a safe mode is what the refusal below asks for, so it gets through
+    re='^/(mode[[:space:]]+)?(accept-edits|normal|plan)([[:space:]]|$)'
+    if ! [[ $text =~ $re ]]; then
+      m=$(unsafe_mode_on_screen || true)
+      [ -z "$m" ] || die "devin-$name runs in $m mode, which runs commands without asking; send /accept-edits first"
+    fi
     # Keep each instruction in a folder per name. A shared temp file chosen by the caller would let parallel agents overwrite each other
     dir="$STATE_DIR/$name"; mkdir -p -m 700 "$dir"
     n=$(( $(ls "$dir" | wc -l) + 1 )); file="$dir/prompt-$n.md"
-    if [ "${1:--}" = - ]; then cat > "$file"; else cp "$1" "$file"; fi
-    # Pasted text that ends in a newline goes to the agent as a message, so a slash command such as
-    # /accept-edits from a heredoc would not run. $(...) drops the trailing newlines
-    text=$(cat "$file"); printf '%s' "$text" > "$file"
+    printf '%s' "$text" > "$file"
     count "$L" "turn_stats: close" > "$STATE_DIR/$name.turns"
     tmux load-buffer -b "dt-$name" "$file"
     tmux paste-buffer -p -d -b "dt-$name" -t "$s"
@@ -128,7 +162,19 @@ case "$cmd" in
     [[ $lines =~ ^[0-9]+$ ]] || die "lines must be a whole number: $lines"
     tmux capture-pane -p -J -S -2000 -t "$s" | grep -v '^\s*$' | tail -"$lines"
     ;;
-  keys) press "$@" ;;
+  keys)
+    for k in "$@"; do
+      [[ $k =~ ^[0-9]+$ ]] && die "number keys answer a permission prompt at once, with the scope of that number (3 Project and 4 Always save the rule in a config file); move with Down and press Enter on its own"
+      case $k in
+        Enter|C-m|KPEnter)
+          # Checked on the screen before the keys go in, so Enter must come on its own after any move
+          [ $# -eq 1 ] || die "send Enter on its own, after checking the highlighted row with read"
+          tmux capture-pane -p -t "$s" | grep -q '^[[:space:]]*❭[[:space:]]*Bypass mode' &&
+            die "Bypass mode is highlighted; it would approve every later call without asking. Move to Allow or Deny first" ;;
+      esac
+    done
+    press "$@"
+    ;;
   log)  log_file "$name" ;;
   view)
     # Attaching with tmux attach -r would make send-keys fail, so copy the screen without becoming a client
