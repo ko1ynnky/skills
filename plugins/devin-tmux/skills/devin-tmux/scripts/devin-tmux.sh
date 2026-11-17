@@ -28,6 +28,7 @@ session() { echo "devin-$1"; }
 # rather than wait on a log that never changes. The daemon itself can be a child too, of the devin that started it
 log_file() {
   local pane_pid c f
+  tmux has-session -t "$(session "$1")" 2>/dev/null || die "devin-$1 is not running; start it with start"
   pane_pid=$(tmux display -p -t "$(session "$1")" '#{pane_pid}')
   for c in $(pgrep -P "$pane_pid" 2>/dev/null); do
     case $(ps -o command= -p "$c" 2>/dev/null) in
@@ -38,7 +39,7 @@ log_file() {
     f=$(ls "$LOG_DIR"/*_"$c".log 2>/dev/null | head -1 || true)
     [ -n "$f" ] && { echo "$f"; return 0; }
   done
-  return 1
+  die "found no log of the child devin acp of devin-$1 in $LOG_DIR; if Devin has just started, try again in a few seconds"
 }
 
 # load_session lines are the reload on resume, not the end of a turn
@@ -86,11 +87,12 @@ case "$cmd" in
     echo "--- If a trust prompt or a theme picker is open, close it with keys before you send"
     ;;
   send)
+    # Before saving the instruction, so that no copy is left behind when Devin cannot receive it
+    L=$(log_file "$name")
     # Keep each instruction in a folder per name. A shared temp file chosen by the caller would let parallel agents overwrite each other
     dir="$STATE_DIR/$name"; mkdir -p -m 700 "$dir"
     n=$(( $(ls "$dir" | wc -l) + 1 )); file="$dir/prompt-$n.md"
     if [ "${1:--}" = - ]; then cat > "$file"; else cp "$1" "$file"; fi
-    L=$(log_file "$name")
     count "$L" "turn_stats: close" > "$STATE_DIR/$name.turns"
     tmux load-buffer -b "dt-$name" "$file"
     tmux paste-buffer -p -d -b "dt-$name" -t "$s"
@@ -102,6 +104,8 @@ case "$cmd" in
     limit=${1:-540}
     # Arithmetic would evaluate anything else as an expression
     [[ $limit =~ ^[0-9]+$ ]] || die "seconds must be a whole number: $limit"
+    # Devin may have exited since the last call; that is EXITED too, not an error from log_file
+    tmux has-session -t "$s" 2>/dev/null || { echo "EXITED"; exit 11; }
     L=$(log_file "$name")
     t0=$(cat "$STATE_DIR/$name.turns" 2>/dev/null || echo 0)
     end=$((SECONDS + limit))
