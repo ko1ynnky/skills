@@ -26,6 +26,8 @@ APPROVED = [
     "pgrep -fl rspec >/dev/null; ps -eo pid,comm | grep -E 'rspec' | head",
     "rg -n 'call_list' app | sort | uniq -c",
     "git --no-pager log --oneline -5 && git diff --stat",
+    "cd app/models && git log --oneline -3",
+    "sed -ne '1,5p' Gemfile",
 ]
 REFUSED = {
     "sed edits a file": "sed -i '' 's/a/b/' app/models/user.rb",
@@ -101,6 +103,14 @@ REFUSED = {
     "docker registry credentials": "cat ~/.docker/config.json",
     "kube credentials": "cat ~/.kube/config",
     "shell history": "cat ~/.bash_history",
+    # 自動セキュリティレビューで見つかった抜け穴
+    "sed option value read as the script": "sed -l 5 'w out.txt' app.rb",
+    "sed unknown short option": "sed -a -n 'p' app.rb",
+    "cd into another repository runs its git config": "cd /tmp/other-repo && git status",
+    "cd up out of the work folder": "cd ../other && git log",
+    "cd through a variable": "cd $HOME/other && git status",
+    "cd back to the previous folder": "cd - && git status",
+    "cd home": "cd && git status",
 }
 
 
@@ -112,6 +122,7 @@ class ApprovesOnlyReadTestLintAndTypecheck(unittest.TestCase):
         with open(os.path.join(cls.tmp.name, "devin", "config.json"), "w") as f:
             json.dump({"permissions": {"deny": ["Exec(git push)", "Exec(git -C)", "Exec(gh pr merge)"]}}, f)
         os.environ["XDG_CONFIG_HOME"] = cls.tmp.name
+        os.environ["DEVIN_PROJECT_DIR"] = "/work/tree"
 
     def test_approves_reads_tests_lint_and_typechecks(self):
         for command in APPROVED:

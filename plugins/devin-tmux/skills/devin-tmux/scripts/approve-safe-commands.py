@@ -42,7 +42,7 @@ READERS = {
     "ls", "cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "pwd", "echo", "printf", "seq", "cut", "tr",
     "diff", "cmp", "comm", "stat", "basename", "dirname", "realpath", "readlink", "which", "true",
     "false", "test", "column", "nl", "tac", "rev", "shasum", "du", "df", "pgrep", "sleep", "uname", "whoami",
-    "id", "cd",
+    "id",
 }
 GIT_READERS = {
     "status", "diff", "log", "show", "blame", "rev-parse", "ls-files", "ls-tree", "cat-file", "merge-base",
@@ -141,26 +141,39 @@ def positional(args):
     return [a for a in args if not a.startswith("-") or a == "-"]
 
 
+# Short options that take no value. Any other one may take the next word as its value (GNU -l N), and the
+# hook would then read the value as the script and miss the real one
+SED_FLAGS = set("nEruz")
+
+
 def sed_ok(args):
-    scripts = []
+    scripts, values = [], set()
     for i, a in enumerate(args):
+        if i in values:
+            continue
         if a.startswith("--"):
             if a.startswith("--expression="):
                 scripts.append(a.split("=", 1)[1])
-            elif a in ("--expression",) and i + 1 < len(args):
+            elif a == "--expression" and i + 1 < len(args):
                 scripts.append(args[i + 1])
+                values.add(i + 1)
             elif a not in ("--quiet", "--silent", "--regexp-extended", "--posix", "--debug"):
-                return False
+                return False  # GNU sed takes abbreviations (--expr=, --in=), so list the full names only
         elif a.startswith("-") and a != "-":
-            if short_has(a, "iIfs"):
-                return False  # in-place editing, a script file, separate files (-s pairs with -i)
-            if "e" in a[1:]:
-                rest = a[a.index("e", 1) + 1:]
-                scripts.append(rest if rest else (args[i + 1] if i + 1 < len(args) else ""))
+            body = a[1:]
+            k = body.find("e")
+            if not set(body if k < 0 else body[:k]) <= SED_FLAGS:
+                return False
+            if k >= 0:
+                if body[k + 1:]:
+                    scripts.append(body[k + 1:])
+                elif i + 1 < len(args):
+                    scripts.append(args[i + 1])
+                    values.add(i + 1)
+                else:
+                    return False
     if not scripts:
-        pos = [a for j, a in enumerate(args) if not a.startswith("-") and not (j and args[j - 1].endswith("e")
-                                                                                and args[j - 1].startswith("-"))]
-        scripts = pos[:1]
+        scripts = [a for j, a in enumerate(args) if j not in values and (not a.startswith("-") or a == "-")][:1]
     return bool(scripts) and all(sed_script_ok(s) for s in scripts)
 
 
@@ -316,7 +329,27 @@ def pnpm_ok(args):
     return False
 
 
+def cd_ok(args):
+    """Only into the folder Devin works in. git, rspec and pnpm run code named in the repository's config
+    (core.fsmonitor, a pager, .rubocop.yml, package.json), so moving to another repository first is a way to
+    run that repository's code, as git -C would be."""
+    if len(args) != 1 or "$" in args[0] or args[0] == "-":
+        return False
+    target = args[0]
+    if not target.startswith(("/", "~")):
+        return ".." not in target.split("/")
+    root = os.environ.get("DEVIN_PROJECT_DIR")
+    if not root:
+        return False
+    root = os.path.realpath(root)
+    if root in ("/", os.path.realpath(os.path.expanduser("~"))):
+        return False
+    path = os.path.realpath(os.path.expanduser(target))
+    return path == root or path.startswith(root + os.sep)
+
+
 CHECKS = {
+    "cd": cd_ok,
     "rg": lambda a: not any(x.startswith(("--pre", "--hostname-bin")) for x in a),
     "fd": lambda a: not any(short_has(x, "xX") or x.startswith("--exec") for x in a),
     "sort": lambda a: not any(short_has(x, "o") or long_matches(x, ["output", "compress-program"]) for x in a),
