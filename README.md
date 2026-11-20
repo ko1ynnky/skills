@@ -119,6 +119,8 @@ npx skills add ko1ynnky/skills -s devin-tmux
 
 It needs `bash`, `tmux` and the Devin CLI (`devin`) on your `PATH`. The instructions you send are kept under `~/.local/state/devin-tmux/<name>/` until `stop` removes them.
 
+Optionally, register `scripts/approve-safe-commands.py` as a Devin `PermissionRequest` hook. It approves shell commands that only read, test, lint or type-check, so the agent answers fewer prompts, and leaves every other command to the prompt. It needs `python3`. The skill's "Fewer prompts" section shows how to register it.
+
 ## 日本語
 
 `ask-me` は、ターンの最後に「次の 4 点を確認してください」と文章で残された判断を、質問ツールで聞き直させるプラグインです。回答を手で打たず、フォームで選べるようになります。
@@ -134,7 +136,7 @@ Stop フックが各ターンの最後のメッセージを読み、末尾に判
 
 `find-session-id` は、Claude Code、Cursor、Codex の過去のセッションをまとめてキーワード検索し、再開用のセッション ID を返します。インストールは上の find-session-id の手順です。読むのは手元の履歴だけです。
 
-`devin-tmux` は、Devin CLI を tmux の中で動かし続けるスキルです。エージェントは Devin を起動し直さずに、続きの指示を送り、ターンの終わりや許可待ちを待ち、許可に答えられます。`--prompt-file` で起動し直す方法と違い、確認が要る操作も自動で却下されません。Cognition の公式ツールではありません。ターンの終わりは Devin CLI のログの行で、許可待ちは画面のメニューで判定しているため、Devin CLI の更新で動かなくなることがあります。インストールは上の devin-tmux の手順です。`bash`、`tmux`、`devin` が要ります。
+`devin-tmux` は、Devin CLI を tmux の中で動かし続けるスキルです。エージェントは Devin を起動し直さずに、続きの指示を送り、ターンの終わりや許可待ちを待ち、許可に答えられます。`--prompt-file` で起動し直す方法と違い、確認が要る操作も自動で却下されません。Cognition の公式ツールではありません。ターンの終わりは Devin CLI のログの行で、許可待ちは画面のメニューで判定しているため、Devin CLI の更新で動かなくなることがあります。インストールは上の devin-tmux の手順です。`bash`、`tmux`、`devin` が要ります。付属の `scripts/approve-safe-commands.py` を Devin の `PermissionRequest` フックに登録すると、読み取り・テスト・lint・型チェックだけのコマンドは確認なしで通り、それ以外は従来どおり確認になります（`python3` が要ります）。
 
 ## License
 

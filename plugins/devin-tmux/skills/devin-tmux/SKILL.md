@@ -78,6 +78,26 @@ Use an `xhigh` lead for the hardest work. Name the whole pairing ID, including t
 - `Deny` ends Devin's turn. Tell it why and what to do next with `dt send`.
 - When Devin runs several tool calls at once, their prompts come one after another. Run `dt wait` again after each answer; it reports the next one.
 
+## Fewer prompts: the approve hook
+
+Each prompt costs the agent a `wait`, a `keys` and another `wait`, all reading its whole conversation again. `scripts/approve-safe-commands.py` answers the routine ones for it. It is a Devin `PermissionRequest` hook: when a shell command would show a prompt, it approves the command if every part of it only reads, tests, lints or type-checks (`sed` without `-i`, `find` without `-delete` or `-exec`, `git status`/`log`/`diff`/`fetch`, `gh pr view`/`checks`, `bundle exec rspec`/`rubocop`, `pnpm nx test`/`lint`/`typecheck`, and the like; the lists are at the top of the script). Otherwise it prints nothing, and Devin shows its prompt as before.
+
+- It leaves to the prompt: writes through the shell (`>`, `touch`, `mkdir`, `rm`) and through a tool's output option (`sort -o`, `rspec --out`, …), commits, pushes, `gh` writes, `git fetch` with a refspec, `xargs`, `npx`, MCP tools, environment variables other than a few such as `RAILS_ENV=test`, and any command that names a secret (`.env`, `.ssh`, `token`, `credential`, …).
+- It also leaves to the prompt any shell syntax where its parser and the shell could read a command differently: `$(...)`, backquotes, heredocs, multi-line scripts, backslashes outside quotes (`find . \; …`), globs, braces, parentheses, `!`, and variables other than `$HOME`, `$PWD` and `$?`. Quoted separators such as `find . ';' …` stay arguments of the command they belong to. An independent review found bypasses of these kinds in the first version; its cases are in the tests.
+- It never blocks. Devin treats a hook that fails or times out as if it had not run, so in accept-edits mode a broken hook costs a prompt, not a command that should have asked. Keep blocking in the `deny` list.
+- On Devin CLI 3000.14.30821, approved commands ran without a prompt, and a deny rule still won over a hook that approved everything (`PreToolUse` or `PermissionRequest`): `git -C . status` and `git push` were refused. The hook also skips a command that matches a deny rule.
+- Register it once in `~/.config/devin/config.json`, with the absolute path of the script under this skill's base directory. Devin reads hooks when it starts, so restart running sessions.
+
+  ```json
+  "hooks": {
+    "PermissionRequest": [
+      { "matcher": "exec", "hooks": [{ "type": "command", "command": "python3 <base directory>/scripts/approve-safe-commands.py", "timeout": 10 }] }
+    ]
+  }
+  ```
+- Before widening its lists, check them against what the project lets an agent approve. Run its tests with `python3 -m unittest discover -s <base directory>/scripts -p 'test_*.py'`.
+- Devin asks less when it writes files with its edit tool instead of `cat > file`, and runs checks as one-line commands. Rules in `~/.codeium/windsurf/memories/global_rules.md` can tell it so in every folder.
+
 ## Notes
 
 - From Codex, the sandbox may refuse to connect to the tmux socket (`/private/tmp/tmux-<uid>/`). If it does, run with escalated permissions or ask the user to allow it. Don't look for another way to run Devin.

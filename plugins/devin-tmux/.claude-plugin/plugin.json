@@ -1,6 +1,6 @@
 {
   "name": "devin-tmux",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Keeps the Devin CLI running in tmux so an agent can send follow-up instructions, wait for the turn to end and answer permission prompts.",
   "author": {
     "name": "ko1ynnky",
