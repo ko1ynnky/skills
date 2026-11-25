@@ -89,7 +89,7 @@ unsafe_mode_on_screen() {
 # Choosing by the family's version number, not a fixed ID, moves agents to a new SWE release without editing
 # this file; the list is not sorted by release. SWE Flash and the paid lightning variants never match
 latest_free_swe() {
-  devin models list --format json --process-model in-process | python3 -c '
+  devin models list --format json --process-model in-process | python3 -I -c '
 import json, re, sys
 effort = sys.argv[1]
 found = []
