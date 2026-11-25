@@ -10,7 +10,7 @@ An agent's terminal tool cannot type into a program that is already running. Run
 ## Steps
 
 1. Start, once per task. The tmux session is named `devin-<name>`; a name takes letters, digits, `-` and `_`.
-   - New: `dt start <name> <work folder> --model swe-2-high --permission-mode accept-edits`. For another model, see "Choosing a model".
+   - New: `dt start <name> <work folder> --permission-mode accept-edits`. Without `--model`, `start` picks the newest free SWE model at high effort (see "Choosing a model").
    - Resume: `dt start <name> <work folder> -r <Devin session name>` (the names are in the `sessions` table of `~/.local/share/devin/cli/sessions.db`). A resumed session ignores `--permission-mode` (see Notes). After `start`, read the status line with `dt read <name> 3`; if it does not end in `· accept edits`, send `/accept-edits` with `dt send` before the instruction.
    - Give the folder the work happens in (the worktree, for example), not a parent folder. Devin then reads that repository's `AGENTS.md`, and `accept-edits` covers edits inside it only. It reads its settings only from that folder, though (see Notes).
    - `--permission-mode accept-edits` lets file edits inside the work folder run without a prompt, while every shell command still asks. Without it, each edit asks too. `start` refuses `smart`, `bypass`, `dangerous` and `autonomous`: in tests on Devin CLI 3000.12.57 and 3000.13.4, `git commit`, `git push` and `rm` ran in `smart` mode without asking, although the docs say these always ask, and the others approve every call.
@@ -32,13 +32,13 @@ To work alongside, the user can run `tmux attach -t devin-<name>` in a terminal 
 
 ## Choosing a model
 
-Pass the model to `dt start` with `--model`. To change it in a running session, send `/model <id>` with `dt send`. That also saves the model as the default for new sessions (`agent.model` in `~/.config/devin/config.json`), so prefer `--model` when the change is for this task only. `devin models` lists every model with its price on the signed-in account. Trust that list over the docs.
+Pass the model to `dt start` with `--model`. `--model swe-latest-<effort>` (`low`, `medium`, `high`, `xhigh`, `max`) names the newest SWE release whose model at that effort `devin models` marks `Free`, and a new session without `--model` gets `swe-latest-high`. `start` prints the resolved command on stderr; `dt latest-model [effort]` prints the ID alone. Don't write a fixed SWE ID such as `swe-2-high`: it stays on an old release after a new one comes out. A resume without `--model` keeps the session's saved model. To change it in a running session, send `/model <id>` with `dt send`. That also saves the model as the default for new sessions (`agent.model` in `~/.config/devin/config.json`), so prefer `--model` when the change is for this task only. `devin models` lists every model with its price on the signed-in account. Trust that list over the docs.
 
 ### Who pays
 
 In the Devin CLI, the model decides who pays.
 
-- A model that `devin models` marks `Free` costs nothing. On Pro, Max, and Teams, this covers `swe-2-medium`, `swe-2-high`, `swe-2-max`, and the SWE-2 sidekick in Fusion. Enterprise accounts pay for SWE-2.
+- A model that `devin models` marks `Free` costs nothing. On Pro, Max, and Teams, this covers the SWE models (for example SWE-2.1 and SWE-2, but not their `lightning` variants) and the SWE-2 sidekick in Fusion. Enterprise accounts pay for SWE.
 - A GPT model bills a ChatGPT plan when the account shares one. Sharing needs a ChatGPT Go, Plus, or Pro plan linked in Devin, on a Devin Pro, Max, or Teams plan. Run `/billing` to check. It shows `Use your ChatGPT plan: on` while GPT goes to the ChatGPT plan. Fast and priority GPT variants never go to the ChatGPT plan.
 - Every other model bills the Devin quota at the price that `devin models` shows, and then on-demand credits. A Teams flex seat has no quota, so it bills the credits directly.
 
@@ -46,9 +46,9 @@ In the Devin CLI, the model decides who pays.
 
 | Work | Model |
 | --- | --- |
-| Most tasks | `swe-2-high` |
-| A harder task, or one that `swe-2-high` got wrong | `swe-2-max` |
-| A design decision, a subtle bug, or a task that `swe-2-max` got wrong | A Fusion pairing with a frontier lead and the SWE-2 sidekick. Pick the lead in the next section. |
+| Most tasks | `swe-latest-high` (the default) |
+| A harder task, or one that `swe-latest-high` got wrong | `swe-latest-max` |
+| A design decision, a subtle bug, or a task that `swe-latest-max` got wrong | A Fusion pairing with a frontier lead and the SWE-2 sidekick. Pick the lead in the next section. |
 
 ### Pick the Fusion lead
 

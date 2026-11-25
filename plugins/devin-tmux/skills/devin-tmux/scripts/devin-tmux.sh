@@ -10,6 +10,7 @@
 #   devin-tmux.sh log   <name>                                  prints the path of the log file
 #   devin-tmux.sh view  <name>                                  keeps redrawing the screen for the user, without attaching as a tmux client
 #   devin-tmux.sh stop  <name>
+#   devin-tmux.sh latest-model [effort=high]                    prints the newest free SWE model ID; start --model swe-latest[-<effort>] uses it
 #
 # Why not resume with --prompt-file: every confirmation in that turn is rejected as NonInteractive.
 # Sent as ordinary input, the permission prompt appears and can be answered with keys.
@@ -84,7 +85,37 @@ unsafe_mode_on_screen() {
   [[ " · $left · " =~ $re ]] && echo "${BASH_REMATCH[1]}"
 }
 
-cmd=${1:?usage: devin-tmux.sh start|send|wait|read|keys|log|view|stop <name> ...}
+# The newest free SWE model at an effort (low, medium, high, xhigh, max), read from the account's own model list.
+# Choosing by the family's version number, not a fixed ID, moves agents to a new SWE release without editing
+# this file; the list is not sorted by release. SWE Flash and the paid lightning variants never match
+latest_free_swe() {
+  devin models list --format json --process-model in-process | python3 -c '
+import json, re, sys
+effort = sys.argv[1]
+found = []
+for f in json.load(sys.stdin)["families"]:
+    m = re.fullmatch(r"swe-(\d+(?:\.\d+)*)", f.get("slug", ""))
+    if not m:
+        continue
+    uid = f["family_uid"] + "-" + effort
+    if any(v["model_uid"] == uid and v.get("cost_tier") == "Free" for v in f["variants"]):
+        found.append((tuple(int(x) for x in m.group(1).split(".")), uid))
+if not found:
+    sys.exit("no free SWE model at effort " + effort)
+print(max(found)[1])
+' "$1"
+}
+
+resolve_model() {
+  case $1 in
+    swe-latest) latest_free_swe high ;;
+    swe-latest-*) latest_free_swe "${1#swe-latest-}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+cmd=${1:?usage: devin-tmux.sh start|send|wait|read|keys|log|view|stop <name> ... | latest-model [effort]}
+if [ "$cmd" = latest-model ]; then latest_free_swe "${2:-high}"; exit; fi
 name=${2:?name required}
 shift 2
 # The name goes into tmux targets and into the folder that stop deletes, so ., :, / and .. must not get through
@@ -102,6 +133,28 @@ case "$cmd" in
       prev=$a
     done
     [[ $mode =~ ^($UNSAFE_MODES)$ ]] && die "permission mode $mode runs commands without asking (smart ran git commit, push and rm in tests); use accept-edits"
+    # --model swe-latest[-<effort>] names the newest free SWE model. A new session without --model gets it at high:
+    # Devin's own default is agent.model in the config, which /model overwrites and which stays on an old release.
+    # A resume without --model keeps the model saved with the session, so nothing is added there
+    args=(); model_given=; resuming=; prev=
+    for a in "$@"; do
+      if [ "$prev" = --model ]; then
+        m=$(resolve_model "$a") || die "could not resolve the model $a"; a=$m
+      else
+        case $a in
+          --model) model_given=1 ;;
+          --model=*) model_given=1; m=$(resolve_model "${a#*=}") || die "could not resolve the model ${a#*=}"; a=--model=$m ;;
+          -r|--resume|--resume=*|-c|--continue) resuming=1 ;;
+        esac
+      fi
+      args+=("$a"); prev=$a
+    done
+    if [ -z "$model_given" ] && [ -z "$resuming" ] && [ -z "${DEVIN_MODEL:-}" ]; then
+      m=$(latest_free_swe high) || die "could not find the newest free SWE model; pass --model"
+      args+=(--model "$m")
+    fi
+    set -- ${args[@]+"${args[@]}"}
+    echo "devin-tmux: devin $*" >&2
     # In-process keeps the agent's log to this devin alone; see log_file. Devin rejects the option given twice
     case " $* " in *" --process-model"[\ =]*) ;; *) set -- "$@" --process-model in-process ;; esac
     # Given devin and its arguments separately, tmux runs them without a shell, so no argument is parsed again
