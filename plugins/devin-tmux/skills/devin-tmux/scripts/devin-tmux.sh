@@ -133,23 +133,36 @@ case "$cmd" in
       prev=$a
     done
     [[ $mode =~ ^($UNSAFE_MODES)$ ]] && die "permission mode $mode runs commands without asking (smart ran git commit, push and rm in tests); use accept-edits"
-    # --model swe-latest[-<effort>] names the newest free SWE model. A new session without --model gets it at high:
+    # --model swe-latest[-<effort>] names the newest free SWE model. A session without --model gets it at high:
     # Devin's own default is agent.model in the config, which /model overwrites and which stays on an old release.
-    # A resume without --model keeps the model saved with the session, so nothing is added there
-    args=(); model_given=; resuming=; prev=
+    # A resume keeps only a model saved with the session, and Devin CLI 3000.14.30821 saves none for a session
+    # started with --model (only a switch on resume or /model is saved), so such a resume would fall back to
+    # agent.model too. -c and -r without an ID pick the session later, so nothing is added there
+    args=(); model_given=; resuming=; resume_id=; prev=
     for a in "$@"; do
       if [ "$prev" = --model ]; then
         m=$(resolve_model "$a") || die "could not resolve the model $a"; a=$m
       else
+        [ "$prev" = -r ] || [ "$prev" = --resume ] && case $a in -*) ;; *) resume_id=$a ;; esac
         case $a in
           --model) model_given=1 ;;
           --model=*) model_given=1; m=$(resolve_model "${a#*=}") || die "could not resolve the model ${a#*=}"; a=--model=$m ;;
-          -r|--resume|--resume=*|-c|--continue) resuming=1 ;;
+          -r|--resume) resuming=1 ;;
+          --resume=*) resuming=1; resume_id=${a#*=} ;;
+          -c|--continue) resuming=1 ;;
         esac
       fi
       args+=("$a"); prev=$a
     done
-    if [ -z "$model_given" ] && [ -z "$resuming" ] && [ -z "${DEVIN_MODEL:-}" ]; then
+    add_model=
+    if [ -z "$model_given" ] && [ -z "${DEVIN_MODEL:-}" ]; then
+      if [ -z "$resuming" ]; then add_model=1
+      elif [[ $resume_id =~ ^[A-Za-z0-9_-]+$ ]]; then
+        saved=$(sqlite3 "$HOME/.local/share/devin/cli/sessions.db" "select model from sessions where id = '$resume_id'" 2>/dev/null || true)
+        [ -n "$saved" ] || add_model=1
+      fi
+    fi
+    if [ -n "$add_model" ]; then
       m=$(latest_free_swe high) || die "could not find the newest free SWE model; pass --model"
       args+=(--model "$m")
     fi
